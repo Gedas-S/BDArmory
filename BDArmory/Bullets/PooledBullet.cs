@@ -533,23 +533,37 @@ namespace BDArmory
 
         public static Vector3 CalculateDragAnalyticEstimate(Vector3 currentPosition, Vector3 currentVelocity, float ballisticCoefficient, float timeDelta)
         {
+            float dragMult = (float)FlightGlobals.getAtmDensity(
+                FlightGlobals.getStaticPressure(currentPosition),
+                FlightGlobals.getExternalTemperature(currentPosition))
+                / ballisticCoefficient / 2;
             float speed = currentVelocity.magnitude;
-            float analyticDragVelAdjustment = (float)FlightGlobals.getAtmDensity(
-                FlightGlobals.getStaticPressure(currentPosition), 
-                FlightGlobals.getExternalTemperature(currentPosition));
-            analyticDragVelAdjustment *= timeDelta * speed;
-            analyticDragVelAdjustment += 2 * ballisticCoefficient;
+            // the instantaneous derivative of speed is -speed^2 * dragMult d time
+            // continuously integrating that on time we get a natural logarithmic curve
+            // (look up continuously compounded interest for the most accessible explanation)
+            float finalSpeed = speed / Mathf.Exp(speed * dragMult * timeDelta);
+            // since the dependency is squared instead of linear, divide by a natural logarithm of the ratio
+            // between the two speeds (we're essentially calculating the average speed over the period,
+            // by taking the integral of the speed over the period (ln(x)-ln(y) = ln(x/y)))
+            finalSpeed = speed / (1 + Mathf.Log(speed / finalSpeed));
+            return -currentVelocity.normalized * (speed - finalSpeed);
 
-			analyticDragVelAdjustment = 2 * ballisticCoefficient * speed / analyticDragVelAdjustment;
-            //velocity as a function of time under the assumption of a projectile only acted upon by drag with a constant drag area
 
-            analyticDragVelAdjustment = analyticDragVelAdjustment - speed;
-            //since the above was velocity as a function of time, but we need a difference in drag, subtract the initial velocity
-            //the above number should be negative...
-            //impactVelocity += analyticDragVelAdjustment; //so add it to the impact velocity
+            //float analyticDragVelAdjustment = (float)FlightGlobals.getAtmDensity(
+            //    FlightGlobals.getStaticPressure(currentPosition),
+            //    FlightGlobals.getExternalTemperature(currentPosition));
+            //analyticDragVelAdjustment *= timeDelta * speed;
+            //analyticDragVelAdjustment += 2 * ballisticCoefficient;
 
-            // since this is getting called every update anyway, might as well update the actual velocity
-            return currentVelocity.normalized * analyticDragVelAdjustment;
+            //analyticDragVelAdjustment = 2 * ballisticCoefficient * speed / analyticDragVelAdjustment;
+            ////velocity as a function of time under the assumption of a projectile only acted upon by drag with a constant drag area
+
+            //analyticDragVelAdjustment = analyticDragVelAdjustment - speed;
+            ////since the above was velocity as a function of time, but we need a difference in drag, subtract the initial velocity
+            ////the above number should be negative...
+
+            //// since this is getting called every update anyway, might as well update the actual velocity
+            //return currentVelocity.normalized * analyticDragVelAdjustment;
         }
 
         private float CalculateArmorPenetration(Part hitPart, float anglemultiplier, RaycastHit hit)
