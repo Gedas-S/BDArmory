@@ -1658,7 +1658,6 @@ namespace BDArmory
         private Vector3? FindFiringSolution(Vector3 target, Vector3 relativeVelocity, Vector3 targetAcceleration)
         {
             float simDeltaTime = 0.155f;
-            SimStage simStage = SimStage.Rapid;
             float hitSqrThreshold = (fireTransforms[0].position - target).sqrMagnitude / 33554432; // no reason for the number
             float sqrMaxRange = maxEffectiveDistance * maxEffectiveDistance;
             Vector3 upDir = VectorUtils.GetUpDirection(fireTransforms[0].position);
@@ -1682,21 +1681,28 @@ namespace BDArmory
             float distanceToTargetSqr = (simStartPos - projectedTarget).sqrMagnitude;
             if (distanceToTargetSqr > sqrMaxRange) distanceToTargetSqr = sqrMaxRange;
             float prevClosestPass = float.PositiveInfinity;
-            
+
+            // different delta adjustments
+            Vector3 deltaAdj = Vector3.zero;
+            deltaAdj = -PooledBullet.CalculateDrag(bulletDragType, simStartPos,
+                            part.rb.velocity + (bulletVelocity * solutionVector) + referenceFrameSpeed, bulletBallisticCoefficient,
+                            (simDeltaTime / 2 - Time.fixedDeltaTime));
+            deltaAdj -= FlightGlobals.getGeeForceAtPosition(simStartPos) * (simDeltaTime - Time.fixedDeltaTime) / 2;
+
             while (true)
             {
                 // simulate a trajectory with the current fire transform
                 Vector3 simCurrPos = simStartPos;
-                Vector3 simVelocity = part.rb.velocity + (bulletVelocity * solutionVector);
+                Vector3 simVelocity = part.rb.velocity + (bulletVelocity * solutionVector) + deltaAdj;
                 distanceToTargetSqr = (simStartPos - projectedTarget).sqrMagnitude;
                 int simulationSteps = -1;
 
                 if (bulletDrop) // not doing the if every simulation step
                     while ((simStartPos - simCurrPos).sqrMagnitude <= distanceToTargetSqr)
-                    { 
+                    {
+                        simVelocity += FlightGlobals.getGeeForceAtPosition(simCurrPos) * simDeltaTime;
                         simVelocity += PooledBullet.CalculateDrag(bulletDragType, simCurrPos,
                             simVelocity + referenceFrameSpeed, bulletBallisticCoefficient, simDeltaTime);
-                        simVelocity += FlightGlobals.getGeeForceAtPosition(simCurrPos) * simDeltaTime;
                         simCurrPos += simVelocity * simDeltaTime;
                         ++simulationSteps;
                     }
@@ -1727,7 +1733,7 @@ namespace BDArmory
                 float orthogonalPassSqrDistance = (projectedTarget - orthogonalPass).sqrMagnitude;
 
                 // if getting further away, target is beyond max ballistic trajectory, raising it more won't help
-                if (simStage != SimStage.AccuracyChange && orthogonalPassSqrDistance >= prevClosestPass)
+                if (orthogonalPassSqrDistance >= prevClosestPass)
                 {
                     if (orthogonalPassSqrDistance < 256) break;
                     else
@@ -1739,19 +1745,11 @@ namespace BDArmory
                 }
                 prevClosestPass = orthogonalPassSqrDistance;
 
-                // if close enough first increase accuracy, then return
+                // if close enough return (or increase accuracy if precise))
                 if (orthogonalPassSqrDistance < hitSqrThreshold)
                 {
-                    if (simStage == SimStage.Rapid)
-                    {
-                        simDeltaTime = Time.fixedDeltaTime;
-                        simStage = SimStage.AccuracyChange;
-                    }
-                    else
-                        break;
+                    break;
                 }
-                else if (simStage == SimStage.AccuracyChange)
-                    simStage = SimStage.Refining;
 
                 // else adjust solutionVector
                 // we actually need the double precision for the angles, that one is completely intentional
@@ -1776,7 +1774,6 @@ namespace BDArmory
             firingSolutionVectorPreviousIteration = solutionVector;
             return solutionVector;
         }
-        enum SimStage {Rapid, AccuracyChange, Refining};
 
         IEnumerator AimAndFireAtEndOfFrame()
         {
