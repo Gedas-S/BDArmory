@@ -65,7 +65,7 @@ namespace BDArmory.FX
             if (decalFront != null && hitPart != null)
             {
                 decalFront.transform.SetParent(hitPart.transform);
-                decalFront.transform.position = hit.point + new Vector3(0.25f, 0f, 0f);                               
+                decalFront.transform.position = hit.point + new Vector3(0.0625f, 0f, 0f);                               
                 decalFront.transform.rotation = Quaternion.FromToRotation(Vector3.forward, hit.normal);
                 decalFront.SetActive(true);
 
@@ -77,7 +77,7 @@ namespace BDArmory.FX
                 if (decalBack != null && hitPart != null)
                 {
                     decalBack.transform.SetParent(hitPart.transform);
-                    decalBack.transform.position = hit.point + new Vector3(-0.25f, 0f, 0f);
+                    decalBack.transform.position = hit.point + new Vector3(-0.0625f, 0f, 0f);
                     decalBack.transform.rotation = Quaternion.FromToRotation(Vector3.forward, hit.normal);
                     decalBack.SetActive(true);
                 }
