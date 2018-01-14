@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using BDArmory.Armor;
 using BDArmory.Core;
 using BDArmory.Core.Extension;
@@ -1595,17 +1596,16 @@ namespace BDArmory
 
             //aim assist
             finalAimTarget = targetPosition;
-            FiringSolutionVector = null;
 
             if ((BDArmorySettings.AIM_ASSIST || aiControlled) && eWeaponType != WeaponTypes.Laser)
             {
                 if (targetAcquired)
                 {
-                    FiringSolutionVector = FindFiringSolution(targetPosition, targetVelocity - vessel.Velocity(), targetAcceleration);
+                    StartCoroutine(FindFiringSolutionThreadCoroutine(targetPosition, targetVelocity - vessel.Velocity(), targetAcceleration));
                 }
                 else if (vessel.altitude < 6000)
                 {
-                    FiringSolutionVector = FindFiringSolution(targetPosition, -(part.rb.velocity + Krakensbane.GetFrameVelocityV3f()), Vector3.zero);
+                    StartCoroutine(FindFiringSolutionThreadCoroutine(targetPosition, -(part.rb.velocity + Krakensbane.GetFrameVelocityV3f()), Vector3.zero));
                 }
 
                 //airdetonation
@@ -1648,6 +1648,35 @@ namespace BDArmory
         }
 
         /// <summary>
+        /// Calculates a firing solution in another thread and updates FiringSolutionVector
+        /// on the next fixed update.
+        /// See FindFiringSolution for parameter details.
+        /// </summary>
+        private IEnumerator FindFiringSolutionThreadCoroutine(Vector3 target, Vector3 relativeVelocity, Vector3 targetAcceleration)
+        {
+            // create new variables, updating class variables from another thread is a can of worms I don't want open right now :D
+            Vector3? firingSolution = null;
+            Vector3 aimTarget = target;
+            Vector3? previousSolution = firingSolutionVectorPreviousIteration;
+            var complete = new ManualResetEvent(false);
+            // queue the work
+            ThreadPool.QueueUserWorkItem(o =>
+            {
+                firingSolution = FindFiringSolution(target, relativeVelocity, targetAcceleration, 
+                    out aimTarget, ref previousSolution);
+                complete.Set();
+            });
+            // give it time until the next fixed update
+            yield return new WaitForFixedUpdate();
+            // if it's not done by the next fixed update, oh well, wait
+            complete.WaitOne();
+            // update class parameters
+            FiringSolutionVector = firingSolution;
+            finalAimTarget = aimTarget;
+            firingSolutionVectorPreviousIteration = previousSolution;
+        }
+
+        /// <summary>
         /// Iteratively simulate bullet trajectory and adjust firing direction for the calculated error.
         /// </summary>
         /// <param name="target">Local coordinates of the target position</param>
@@ -1655,7 +1684,8 @@ namespace BDArmory
         /// <param name="targetAcceleration">Acceleration of the target</param>
         /// <returns>If a firing solution is found, a (normalized) Vector3 indicating the direction in which to fire.
         /// If no firing solution is found - null.</returns>
-        private Vector3? FindFiringSolution(Vector3 target, Vector3 relativeVelocity, Vector3 targetAcceleration)
+        private Vector3? FindFiringSolution(Vector3 target, Vector3 relativeVelocity, Vector3 targetAcceleration, 
+            out Vector3 finalAimTarget, ref Vector3? firingSolutionVectorPreviousIteration)
         {
             float simDeltaTime = 0.155f;
             float hitSqrThreshold = (fireTransforms[0].position - target).sqrMagnitude / 33554432; // no reason for the number
@@ -1717,7 +1747,7 @@ namespace BDArmory
 
                 // predict target movement
                 float partialTime = Vector3.Dot((projectedTarget - simCurrPos), simVelocity.normalized) / simVelocity.magnitude;
-                float projectionTime = simulationSteps * simDeltaTime + partialTime;
+                float projectionTime = simulationSteps * simDeltaTime + partialTime + Time.fixedDeltaTime;
                 projectedTarget = target + (relativeVelocity + targetAcceleration * projectionTime / 2) * projectionTime;
 
                 // if target is out of range abort
