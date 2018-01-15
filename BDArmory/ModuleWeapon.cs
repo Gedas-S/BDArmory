@@ -1714,10 +1714,11 @@ namespace BDArmory
 
             // different delta adjustments
             Vector3 deltaAdj = Vector3.zero;
+            if (bulletDrop)
+                deltaAdj -= FlightGlobals.getGeeForceAtPosition(simStartPos) * (simDeltaTime - Time.fixedDeltaTime) / 2;
             deltaAdj = -PooledBullet.CalculateDrag(bulletDragType, simStartPos,
                             part.rb.velocity + (bulletVelocity * solutionVector) + referenceFrameSpeed, bulletBallisticCoefficient,
                             (simDeltaTime / 2 - Time.fixedDeltaTime));
-            deltaAdj -= FlightGlobals.getGeeForceAtPosition(simStartPos) * (simDeltaTime - Time.fixedDeltaTime) / 2;
 
             while (true)
             {
@@ -1747,7 +1748,8 @@ namespace BDArmory
 
                 // predict target movement
                 float partialTime = Vector3.Dot((projectedTarget - simCurrPos), simVelocity.normalized) / simVelocity.magnitude;
-                float projectionTime = simulationSteps * simDeltaTime + partialTime + Time.fixedDeltaTime;
+                // fixedDelta for compensating running on WaitForFixedUpdate and turret rotation
+                float projectionTime = simulationSteps * simDeltaTime + partialTime + Time.fixedDeltaTime * 5;
                 projectedTarget = target + (relativeVelocity + targetAcceleration * projectionTime / 2) * projectionTime;
 
                 // if target is out of range abort
