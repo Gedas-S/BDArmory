@@ -1839,7 +1839,7 @@ namespace BDArmory.Parts
 		    while(wpm.MoveNext())
 		    {
 		        if (wpm.Current == null) continue;
-		        wpm.Current.MissileWarning(Vector3.Distance(transform.position, legacyTargetVessel.transform.position), this);
+		        wpm.Current.rwr.MissileWarning(Vector3.Distance(transform.position, legacyTargetVessel.transform.position), this);
 		        break;
 		    }
             wpm.Dispose();

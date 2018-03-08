@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using BDArmory.Core;
+using BDArmory.Parts;
 using BDArmory.Misc;
 using BDArmory.UI;
 using UnityEngine;
@@ -48,6 +49,8 @@ namespace BDArmory.Radar
         public static AudioClip missileLaunchSound;
         public static AudioClip sonarPing;
         public static AudioClip torpedoPing;
+        public static AudioClip warningSound;
+        public AudioSource warningAudioSource;
         private float torpedoPingPitch;
         private float audioSourceRepeatDelay;
         private const float audioSourceRepeatDelayTime = 0.5f;
@@ -63,6 +66,7 @@ namespace BDArmory.Radar
         public TargetSignatureData[] pingsData;
         public Vector3[] pingWorldPositions;
         List<TargetSignatureData> launchWarnings;
+        bool warningSounding;
 
         Transform rt;
 
@@ -94,6 +98,7 @@ namespace BDArmory.Radar
             missileLaunchSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/mLaunchWarning");
             sonarPing = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/rwr_sonarping");
             torpedoPing = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/rwr_torpedoping");
+            warningSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/warning");
         }
 
         public override void OnStart(StartState state)
@@ -120,6 +125,12 @@ namespace BDArmory.Radar
                 audioSource.spatialBlend = 1;
                 audioSource.dopplerLevel = 0;
                 audioSource.loop = false;
+
+                warningAudioSource = gameObject.AddComponent<AudioSource>();
+                warningAudioSource.minDistance = 1;
+                warningAudioSource.maxDistance = 500;
+                warningAudioSource.dopplerLevel = 0;
+                warningAudioSource.spatialBlend = 1;
 
                 UpdateVolume();
                 BDArmorySetup.OnVolumeChange += UpdateVolume;
@@ -151,6 +162,10 @@ namespace BDArmory.Radar
             if (audioSource)
             {
                 audioSource.volume = BDArmorySettings.BDARMORY_UI_VOLUME;
+            }
+            if (warningAudioSource)
+            {
+                warningAudioSource.volume = BDArmorySettings.BDARMORY_UI_VOLUME;
             }
         }
 
@@ -211,6 +226,17 @@ namespace BDArmory.Radar
                     weaponManager.incomingThreatPosition = source;
                 }
             }
+        }
+
+        public void MissileWarning(float distance, MissileBase ml)
+        {
+            if (vessel.isActiveVessel && !warningSounding)
+            {
+                StartCoroutine(WarningSoundRoutine(distance, ml));
+            }
+
+            weaponManager.missileIsIncoming = true;
+            weaponManager.incomingMissileDistance = distance;
         }
 
         void ReceivePing(Vessel v, Vector3 source, RWRThreatTypes type, float persistTime)
@@ -329,6 +355,27 @@ namespace BDArmory.Radar
             }
         }
 
+        IEnumerator WarningSoundRoutine(float distance, MissileBase ml)//give distance parameter
+        {
+            if (distance < weaponManager.guardRange)
+            {
+                warningSounding = true;
+                BDArmorySetup.Instance.missileWarningTime = Time.time;
+                BDArmorySetup.Instance.missileWarning = true;
+                warningAudioSource.pitch = distance < 800 ? 1.45f : 1f;
+                warningAudioSource.PlayOneShot(warningSound);
+
+                float waitTime = distance < 800 ? .25f : 1.5f;
+
+                yield return new WaitForSeconds(waitTime);
+
+                if (ml.vessel && weaponManager.CanSeeTarget(ml.vessel))
+                {
+                    BDATargetManager.ReportVessel(ml.vessel, weaponManager);
+                }
+            }
+            warningSounding = false;
+        }
 
         void OnGUI()
         {

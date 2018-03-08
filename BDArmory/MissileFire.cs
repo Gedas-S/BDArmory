@@ -244,14 +244,11 @@ namespace BDArmory
         
         //sounds
         AudioSource audioSource;
-        public AudioSource warningAudioSource;
         AudioSource targetingAudioSource;
         AudioClip clickSound;
-        AudioClip warningSound;
         AudioClip armOnSound;
         AudioClip armOffSound;
         AudioClip heatGrowlSound;
-        bool warningSounding;
 
         //missile warning
         public bool missileIsIncoming;
@@ -664,7 +661,6 @@ namespace BDArmory
         public override void OnAwake()
         {
             clickSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/click");
-            warningSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/warning");
             armOnSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/armOn");
             armOffSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/armOff");
             heatGrowlSound = GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/heatGrowl");
@@ -705,12 +701,6 @@ namespace BDArmory
                 audioSource.maxDistance = 500;
                 audioSource.dopplerLevel = 0;
                 audioSource.spatialBlend = 1;
-
-                warningAudioSource = gameObject.AddComponent<AudioSource>();
-                warningAudioSource.minDistance = 1;
-                warningAudioSource.maxDistance = 500;
-                warningAudioSource.dopplerLevel = 0;
-                warningAudioSource.spatialBlend = 1;
 
                 targetingAudioSource = gameObject.AddComponent<AudioSource>();
                 targetingAudioSource.minDistance = 1;
@@ -1653,10 +1643,6 @@ namespace BDArmory
             {
                 audioSource.volume = BDArmorySettings.BDARMORY_UI_VOLUME;
             }
-            if (warningAudioSource)
-            {
-                warningAudioSource.volume = BDArmorySettings.BDARMORY_UI_VOLUME;
-            }
             if (targetingAudioSource)
             {
                 targetingAudioSource.volume = BDArmorySettings.BDARMORY_UI_VOLUME;
@@ -1714,28 +1700,6 @@ namespace BDArmory
                     targetingAudioSource.Stop();
                 }
             }
-        }
-
-        IEnumerator WarningSoundRoutine(float distance, MissileBase ml)//give distance parameter
-        {
-            if (distance < this.guardRange)
-            {
-                warningSounding = true;
-                BDArmorySetup.Instance.missileWarningTime = Time.time;
-                BDArmorySetup.Instance.missileWarning = true;
-                warningAudioSource.pitch = distance < 800 ? 1.45f : 1f;
-                warningAudioSource.PlayOneShot(warningSound);
-
-                float waitTime = distance < 800 ? .25f : 1.5f;
-
-                yield return new WaitForSeconds(waitTime);
-
-                if (ml.vessel && CanSeeTarget(ml.vessel))
-                {
-                    BDATargetManager.ReportVessel(ml.vessel, this);
-                }
-            }
-            warningSounding = false;
         }
 
         #endregion
@@ -1890,17 +1854,6 @@ namespace BDArmory
                 }
             }
             isLegacyCMing = false;
-        }
-        
-        public void MissileWarning(float distance, MissileBase ml)//take distance parameter
-        {
-            if (vessel.isActiveVessel && !warningSounding)
-            {
-                StartCoroutine(WarningSoundRoutine(distance, ml));
-            }
-
-            missileIsIncoming = true;
-            incomingMissileDistance = distance;
         }
 
         #endregion
