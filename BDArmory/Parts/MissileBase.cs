@@ -128,6 +128,9 @@ namespace BDArmory.Parts
 
         public bool HasFired { get; set; } = false;
 
+        [Obsolete("move to activation based stuff, also this is never set")]
+        public MissileFire WeaponManager { get; private set; }
+
         public bool Team { get; set; }
 
         public bool HasMissed { get; set; } = false;
@@ -212,6 +215,11 @@ namespace BDArmory.Parts
         private float _originalDistance = float.MinValue;
         private Vector3 _startPoint;
 
+        //bomb aimer
+        public Vector3 bombAimerPosition { get; private set; } = Vector3.zero;
+        Texture2D bombAimerTexture = GameDatabase.Instance.GetTexture("BDArmory/Textures/grayCircle", false);
+        bool showBombAimer;
+
 
         public string GetSubLabel()
         {
@@ -234,6 +242,11 @@ namespace BDArmory.Parts
         public abstract float GetBlastRadius();
 
         protected abstract void PartDie(Part p);
+
+        public virtual void FixedUpdate()
+        {
+            BombAimer();
+        }
 
         protected void DisablingExplosives(Part p)
         {
@@ -1028,5 +1041,173 @@ namespace BDArmory.Parts
             Debug.Log("[BDArmory]: Missile Collided - Triggering Detonation");
             Detonate();
         }
+
+
+        #region Aimer
+
+        void OnGUI()
+        {
+            if (showBombAimer)
+            {
+                MissileBase ml = WeaponManager.CurrentMissile;
+                if (ml)
+                {
+                    float size = 128;
+                    Texture2D texture = BDArmorySetup.Instance.greenCircleTexture;
+
+
+                    if ((ml is MissileLauncher && ((MissileLauncher)ml).guidanceActive) || ml is BDModularGuidance)
+                    {
+                        texture = BDArmorySetup.Instance.largeGreenCircleTexture;
+                        size = 256;
+                    }
+                    BDGUIUtils.DrawTextureOnWorldPos(bombAimerPosition, texture, new Vector2(size, size), 0);
+                }
+            }
+        }
+
+        void BombAimer()
+        {
+            if (WeaponManager.selectedWeapon == null || GetWeaponClass() != WeaponClasses.Bomb)
+            {
+                showBombAimer = false;
+                return;
+            }
+
+            showBombAimer =
+            (
+                !MapView.MapIsEnabled &&
+                vessel.isActiveVessel &&
+                WeaponManager.selectedWeapon != null &&
+                WeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Bomb &&
+                BDArmorySettings.DRAW_AIMERS &&
+                vessel.verticalSpeed < 50 &&
+                AltitudeTrigger()
+            );
+
+            if (!showBombAimer && (!WeaponManager.guardMode || WeaponManager.weaponIndex <= 0 ||
+                                   WeaponManager.selectedWeapon.GetWeaponClass() != WeaponClasses.Bomb)) return;
+
+            float simDeltaTime = 0.1f;
+            float simTime = 0;
+            Vector3 dragForce = Vector3.zero;
+            Vector3 prevPos = MissileReferenceTransform.position;
+            Vector3 currPos = MissileReferenceTransform.position;
+            //Vector3 simVelocity = vessel.rb_velocity;
+            Vector3 simVelocity = vessel.Velocity(); //Issue #92
+
+            MissileLauncher launcher = this as MissileLauncher;
+            if (launcher != null)
+            {
+                simVelocity += launcher.decoupleSpeed *
+                               (launcher.decoupleForward
+                                   ? launcher.MissileReferenceTransform.forward
+                                   : -launcher.MissileReferenceTransform.up);
+            }
+            else
+            {   //TODO: BDModularGuidance review this value
+                simVelocity += 5 * -launcher.MissileReferenceTransform.up;
+            }
+
+
+            List<Vector3> pointPositions = new List<Vector3>();
+            pointPositions.Add(currPos);
+
+
+            prevPos = MissileReferenceTransform.position;
+            currPos = MissileReferenceTransform.position;
+
+            bombAimerPosition = Vector3.zero;
+
+
+            bool simulating = true;
+            while (simulating)
+            {
+                prevPos = currPos;
+                currPos += simVelocity * simDeltaTime;
+                float atmDensity =
+                    (float)
+                    FlightGlobals.getAtmDensity(FlightGlobals.getStaticPressure(currPos),
+                        FlightGlobals.getExternalTemperature(), FlightGlobals.currentMainBody);
+
+                simVelocity += FlightGlobals.getGeeForceAtPosition(currPos) * simDeltaTime;
+                float simSpeedSquared = simVelocity.sqrMagnitude;
+
+                float drag = 0;
+                if (launcher != null)
+                {
+                    drag = launcher.simpleDrag;
+                    if (simTime > launcher.deployTime)
+                    {
+                        drag = launcher.deployedDrag;
+                    }
+                }
+                else
+                {
+                    //TODO:BDModularGuidance drag calculation
+                    drag = vessel.parts.Sum(x => x.dragScalar);
+
+                }
+
+                dragForce = (0.008f * part.mass) * drag * 0.5f * simSpeedSquared * atmDensity * simVelocity.normalized;
+                simVelocity -= (dragForce / part.mass) * simDeltaTime;
+
+                Ray ray = new Ray(prevPos, currPos - prevPos);
+                RaycastHit hitInfo;
+                if (Physics.Raycast(ray, out hitInfo, Vector3.Distance(prevPos, currPos), (1 << 15) | (1 << 17)))
+                {
+                    bombAimerPosition = hitInfo.point;
+                    simulating = false;
+                }
+                else if (FlightGlobals.getAltitudeAtPos(currPos) < 0)
+                {
+                    bombAimerPosition = currPos -
+                                        (FlightGlobals.getAltitudeAtPos(currPos) * FlightGlobals.getUpAxis());
+                    simulating = false;
+                }
+
+                simTime += simDeltaTime;
+                pointPositions.Add(currPos);
+            }
+
+
+            //debug lines
+            if (BDArmorySettings.DRAW_DEBUG_LINES && BDArmorySettings.DRAW_AIMERS)
+            {
+                Vector3[] pointsArray = pointPositions.ToArray();
+                LineRenderer lr = GetComponent<LineRenderer>();
+                if (!lr)
+                {
+                    lr = gameObject.AddComponent<LineRenderer>();
+                }
+                lr.enabled = true;
+                lr.SetWidth(.1f, .1f);
+                lr.SetVertexCount(pointsArray.Length);
+                for (int i = 0; i < pointsArray.Length; i++)
+                {
+                    lr.SetPosition(i, pointsArray[i]);
+                }
+            }
+            else
+            {
+                if (gameObject.GetComponent<LineRenderer>())
+                {
+                    gameObject.GetComponent<LineRenderer>().enabled = false;
+                }
+            }
+        }
+
+        bool AltitudeTrigger()
+        {
+            float maxAlt = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE * 0.75f, 2250, 10000);
+            double asl = vessel.mainBody.GetAltitude(vessel.CoM);
+            double radarAlt = asl - vessel.terrainAltitude;
+
+            return radarAlt < maxAlt || asl < maxAlt;
+        }
+
+
+        #endregion
+
     }
 }

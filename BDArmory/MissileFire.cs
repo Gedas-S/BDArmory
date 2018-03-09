@@ -16,6 +16,15 @@ namespace BDArmory
 {
     public class MissileFire : PartModule
     {
+        /*
+         * MissileFire has been split into modules:
+         * MissileFire aka WeaponManager, which now should only manage weapons
+         * Control.BDGuardMode which manages firing weapons automatically
+         * Control.BDDefenseModule which manages firing countermeasures automatically
+         * Control.BDFireControl which manages weapon firing patterns (old rippleFire)
+         * Radar.RadarWarningReceiver related stuff has been moved there
+         * Bomb aimer moved to Parts.MissileBase
+         */
 
         #region  Declarations
 
@@ -228,12 +237,6 @@ namespace BDArmory
         }
 
         public bool hasSingleFired;
-
-        //bomb aimer
-        Part bombPart;
-        Vector3 bombAimerPosition = Vector3.zero;
-        Texture2D bombAimerTexture = GameDatabase.Instance.GetTexture("BDArmory/Textures/grayCircle", false);
-        bool showBombAimer;
         
         //targeting
         private List<Vessel> loadedVessels = new List<Vessel>();
@@ -888,8 +891,6 @@ namespace BDArmory
             {
                 TargetAcquire();
             }
-
-            BombAimer();
         }
 
         void OnDestroy()
@@ -930,25 +931,6 @@ namespace BDArmory
                             incomingMissileVessel.transform.position, 5, Color.cyan);
                     }
                 }
-
-                if (showBombAimer)
-                {
-                    MissileBase ml = CurrentMissile;
-                    if (ml)
-                    {
-                        float size = 128;
-                        Texture2D texture = BDArmorySetup.Instance.greenCircleTexture;
-
-
-                        if ((ml is MissileLauncher && ((MissileLauncher)ml).guidanceActive) || ml is BDModularGuidance)
-                        {
-                            texture = BDArmorySetup.Instance.largeGreenCircleTexture;
-                            size = 256;
-                        }
-                        BDGUIUtils.DrawTextureOnWorldPos(bombAimerPosition, texture, new Vector2(size, size), 0);
-                    }
-                }
-
 
 
                 //MISSILE LOCK HUD
@@ -1526,7 +1508,7 @@ namespace BDArmory
             while (guardTarget && Time.time - bombStartTime < bombAttemptDuration && weaponIndex > 0 &&
                    weaponArray[weaponIndex].GetWeaponClass() == WeaponClasses.Bomb && missilesAway < maxMissilesOnTarget)
             {
-                float targetDist = Vector3.Distance(bombAimerPosition, guardTarget.CoM);
+                float targetDist = Vector3.Distance(CurrentMissile.bombAimerPosition, guardTarget.CoM);
 
                 if (targetDist < (radius * 20f) && !hasSetCargoBays)
                 {
@@ -1537,7 +1519,7 @@ namespace BDArmory
                 if (targetDist > radius)
                 {
                     if (targetDist < Mathf.Max(radius * 2, 800f) &&
-                        Vector3.Dot(guardTarget.CoM - bombAimerPosition, guardTarget.CoM - transform.position) < 0)
+                        Vector3.Dot(guardTarget.CoM - CurrentMissile.bombAimerPosition, guardTarget.CoM - transform.position) < 0)
                     {
                         pilotAI.RequestExtend(guardTarget.CoM);
                         break;
@@ -2123,16 +2105,6 @@ namespace BDArmory
             }
 
             //selectedWeapon = weaponArray[weaponIndex];
-
-            //bomb stuff
-            if (selectedWeapon != null && selectedWeapon.GetWeaponClass() == WeaponClasses.Bomb)
-            {
-                bombPart = selectedWeapon.GetPart();
-            }
-            else
-            {
-                bombPart = null;
-            }
 
             //gun ripple stuff
             if (selectedWeapon != null && selectedWeapon.GetWeaponClass() == WeaponClasses.Gun &&
@@ -4441,169 +4413,7 @@ namespace BDArmory
             weapon.Dispose();
         }
 
-
         #endregion
-
-        #region Aimer
-
-        void BombAimer()
-        {
-            if (selectedWeapon == null)
-            {
-                showBombAimer = false;
-                return;
-            }
-            if (!bombPart || selectedWeapon.GetPart() != bombPart)
-            {
-                if (selectedWeapon.GetWeaponClass() == WeaponClasses.Bomb)
-                {
-                    bombPart = selectedWeapon.GetPart();
-                }
-                else
-                {
-                    showBombAimer = false;
-                    return;
-                }
-            }
-
-            showBombAimer =
-            (
-                !MapView.MapIsEnabled &&
-                vessel.isActiveVessel &&
-                selectedWeapon != null &&
-                selectedWeapon.GetWeaponClass() == WeaponClasses.Bomb &&
-                bombPart != null &&
-                BDArmorySettings.DRAW_AIMERS &&
-                vessel.verticalSpeed < 50 &&
-                AltitudeTrigger()
-            );
-
-            if (!showBombAimer && (!guardMode || weaponIndex <= 0 ||
-                                   selectedWeapon.GetWeaponClass() != WeaponClasses.Bomb)) return;
-            MissileBase ml = bombPart.GetComponent<MissileBase>();
-
-            float simDeltaTime = 0.1f;
-            float simTime = 0;
-            Vector3 dragForce = Vector3.zero;
-            Vector3 prevPos = ml.MissileReferenceTransform.position;
-            Vector3 currPos = ml.MissileReferenceTransform.position;
-            //Vector3 simVelocity = vessel.rb_velocity;
-            Vector3 simVelocity = vessel.Velocity(); //Issue #92
-
-            MissileLauncher launcher = ml as MissileLauncher;
-            if (launcher != null)
-            {
-                simVelocity += launcher.decoupleSpeed *
-                               (launcher.decoupleForward
-                                   ? launcher.MissileReferenceTransform.forward
-                                   : -launcher.MissileReferenceTransform.up);
-            }
-            else
-            {   //TODO: BDModularGuidance review this value
-                simVelocity += 5 * -launcher.MissileReferenceTransform.up;
-            }
-
-
-            List<Vector3> pointPositions = new List<Vector3>();
-            pointPositions.Add(currPos);
-
-
-            prevPos = ml.MissileReferenceTransform.position;
-            currPos = ml.MissileReferenceTransform.position;
-
-            bombAimerPosition = Vector3.zero;
-
-
-            bool simulating = true;
-            while (simulating)
-            {
-                prevPos = currPos;
-                currPos += simVelocity * simDeltaTime;
-                float atmDensity =
-                    (float)
-                    FlightGlobals.getAtmDensity(FlightGlobals.getStaticPressure(currPos),
-                        FlightGlobals.getExternalTemperature(), FlightGlobals.currentMainBody);
-
-                simVelocity += FlightGlobals.getGeeForceAtPosition(currPos) * simDeltaTime;
-                float simSpeedSquared = simVelocity.sqrMagnitude;
-
-                launcher = ml as MissileLauncher;
-                float drag = 0;
-                if (launcher != null)
-                {
-                    drag = launcher.simpleDrag;
-                    if (simTime > launcher.deployTime)
-                    {
-                        drag = launcher.deployedDrag;
-                    }
-                }
-                else
-                {
-                    //TODO:BDModularGuidance drag calculation
-                    drag = ml.vessel.parts.Sum(x => x.dragScalar);
-
-                }
-
-                dragForce = (0.008f * bombPart.mass) * drag * 0.5f * simSpeedSquared * atmDensity * simVelocity.normalized;
-                simVelocity -= (dragForce / bombPart.mass) * simDeltaTime;
-
-                Ray ray = new Ray(prevPos, currPos - prevPos);
-                RaycastHit hitInfo;
-                if (Physics.Raycast(ray, out hitInfo, Vector3.Distance(prevPos, currPos), (1 << 15) | (1 << 17)))
-                {
-                    bombAimerPosition = hitInfo.point;
-                    simulating = false;
-                }
-                else if (FlightGlobals.getAltitudeAtPos(currPos) < 0)
-                {
-                    bombAimerPosition = currPos -
-                                        (FlightGlobals.getAltitudeAtPos(currPos) * FlightGlobals.getUpAxis());
-                    simulating = false;
-                }
-
-                simTime += simDeltaTime;
-                pointPositions.Add(currPos);
-            }
-
-
-            //debug lines
-            if (BDArmorySettings.DRAW_DEBUG_LINES && BDArmorySettings.DRAW_AIMERS)
-            {
-                Vector3[] pointsArray = pointPositions.ToArray();
-                LineRenderer lr = GetComponent<LineRenderer>();
-                if (!lr)
-                {
-                    lr = gameObject.AddComponent<LineRenderer>();
-                }
-                lr.enabled = true;
-                lr.SetWidth(.1f, .1f);
-                lr.SetVertexCount(pointsArray.Length);
-                for (int i = 0; i < pointsArray.Length; i++)
-                {
-                    lr.SetPosition(i, pointsArray[i]);
-                }
-            }
-            else
-            {
-                if (gameObject.GetComponent<LineRenderer>())
-                {
-                    gameObject.GetComponent<LineRenderer>().enabled = false;
-                }
-            }
-        }
-
-        bool AltitudeTrigger()
-        {
-            float maxAlt = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE * 0.75f, 2250, 10000);
-            double asl = vessel.mainBody.GetAltitude(vessel.CoM);
-            double radarAlt = asl - vessel.terrainAltitude;
-
-            return radarAlt < maxAlt || asl < maxAlt;
-        }
-
-
-        #endregion
- 	
 	}
 }
 
