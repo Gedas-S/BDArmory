@@ -1096,25 +1096,6 @@ namespace BDArmory.UI
                     }
                     mr.Dispose();
 
-                    //JAMMERS
-                    List<ModuleECMJammer>.Enumerator jammer = ActiveWeaponManager.jammers.GetEnumerator();
-                    while (jammer.MoveNext())
-                    {
-                        if (jammer.Current == null) continue;
-                        if (jammer.Current.alwaysOn) continue;
-
-                        numberOfModules++;
-                        GUIStyle moduleStyle = jammer.Current.jammerEnabled ? centerLabelBlue : centerLabel;
-                        string label = jammer.Current.part.partInfo.title;
-                        if (GUI.Button(new Rect(leftIndent, +(moduleLines*entryHeight), contentWidth, entryHeight),
-                            label, moduleStyle))
-                        {
-                            jammer.Current.Toggle();
-                        }
-                        moduleLines++;
-                    }
-                    jammer.Dispose();
-
                     //Other modules
                     using (var module = ActiveWeaponManager.wmModules.GetEnumerator())
                         while (module.MoveNext())

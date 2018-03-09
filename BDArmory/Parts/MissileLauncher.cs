@@ -1772,7 +1772,7 @@ namespace BDArmory.Parts
 		        while(wpm.MoveNext())
 		        {
 		            if (wpm.Current == null) continue;
-		            wpm.Current.missileIsIncoming = false;
+		            wpm.Current.DefenseControl.missileIsIncoming = false;
 		        }
 		        wpm.Dispose();
 		    }

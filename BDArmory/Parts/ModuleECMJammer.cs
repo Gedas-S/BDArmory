@@ -5,7 +5,7 @@ using System;
 
 namespace BDArmory.Parts
 {
-    public class ModuleECMJammer : PartModule
+    public class ModuleECMJammer : PartModule, UI.IBDWMModule
     {
         [KSPField] public float jammerStrength = 700;
 
@@ -25,6 +25,7 @@ namespace BDArmory.Parts
 
         [KSPField(isPersistant = true, guiActive = true, guiName = "Enabled")]
         public bool jammerEnabled = false;
+        public bool Enabled => jammerEnabled;
 
         VesselECMJInfo vesselJammer;
 
@@ -72,12 +73,6 @@ namespace BDArmory.Parts
             if (!HighLogic.LoadedSceneIsFlight) return;
             part.force_activate();
             List<MissileFire>.Enumerator wm = vessel.FindPartModulesImplementing<MissileFire>().GetEnumerator();
-            while (wm.MoveNext())
-            {
-                if (wm.Current == null) continue;
-                wm.Current.jammers.Add(this);
-            }
-            wm.Dispose();
 
             GameEvents.onVesselCreate.Add(OnVesselCreate);
         }
@@ -169,6 +164,7 @@ namespace BDArmory.Parts
             }
         }
 
+        public string Name => part.partInfo.title;
 
         // RMB info in editor
         public override string GetInfo()

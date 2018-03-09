@@ -21,6 +21,7 @@ namespace BDArmory.Control
         protected Vessel activeVessel;
 
 		public MissileFire weaponManager { get; protected set; }
+        public BDDefenseControl defenseControl { get; protected set; }
 
 		/// <summary>
 		/// The default is BDAirspeedControl. If you want to use something else, just override ActivatePilot  (and, potentially, DeactivatePilot), and make it use something else.
@@ -245,8 +246,11 @@ namespace BDArmory.Control
 		{
 			weaponManager = vessel.FindPartModuleImplementing<MissileFire>();
 			if (weaponManager != null)
-				weaponManager.AI = this;
-		}
+            {
+                weaponManager.AI = this;
+                defenseControl = weaponManager?.DefenseControl;
+            }
+        }
 
 		protected void GetGuardTarget()
 		{

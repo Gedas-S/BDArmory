@@ -220,11 +220,7 @@ namespace BDArmory.Radar
                         true, (float) RWRThreatTypes.MissileLaunch)));
                 PlayWarningSound(RWRThreatTypes.MissileLaunch);
 
-                if (weaponManager && weaponManager.guardMode)
-                {
-                    weaponManager.FireAllCountermeasures(Random.Range(2, 4));
-                    weaponManager.incomingThreatPosition = source;
-                }
+                weaponManager.DefenseControl.ReceiveLaunchWarning(source, direction);
             }
         }
 
@@ -235,8 +231,8 @@ namespace BDArmory.Radar
                 StartCoroutine(WarningSoundRoutine(distance, ml));
             }
 
-            weaponManager.missileIsIncoming = true;
-            weaponManager.incomingMissileDistance = distance;
+            weaponManager.DefenseControl.missileIsIncoming = true;
+            weaponManager.DefenseControl.incomingMissileDistance = distance;
         }
 
         void ReceivePing(Vessel v, Vector3 source, RWRThreatTypes type, float persistTime)
@@ -263,14 +259,8 @@ namespace BDArmory.Radar
                     PlayWarningSound(type, (source - vessel.transform.position).sqrMagnitude);
                     return;
                 }
-                else if (type == RWRThreatTypes.MissileLock)
-                {
-                    if (!BDArmorySettings.ALLOW_LEGACY_TARGETING && weaponManager && weaponManager.guardMode)
-                    {
-                        weaponManager.FireChaff();
-                        // TODO: if torpedo inbound, also fire accoustic decoys (not yet implemented...)
-                    }
-                }
+
+                weaponManager.DefenseControl.RWRWarning(source, type);
 
                 int openIndex = -1;
                 for (int i = 0; i < dataCount; i++)

@@ -330,7 +330,8 @@ namespace BDArmory.Control
 				lastTargetPosition = requestedExtendTpos;
 			}
 
-			if(evasiveTimer > 0 || (weaponManager && (weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring || weaponManager.underFire)))
+			if(evasiveTimer > 0 || (defenseControl 
+                && (defenseControl.missileIsIncoming || defenseControl.isChaffing || defenseControl.isFlaring || defenseControl.underFire)))
 			{
 				if(evasiveTimer < 1)
 				{
@@ -363,9 +364,9 @@ namespace BDArmory.Control
 							}
 						}
 
-						if(weaponManager.underFire)
+						if(defenseControl.underFire)
 						{
-							threatRelativePosition = weaponManager.incomingThreatPosition - vesselTransform.position;
+							threatRelativePosition = defenseControl.incomingThreatPosition - vesselTransform.position;
 						}
 					}
 				}
@@ -530,7 +531,7 @@ namespace BDArmory.Control
 
 		bool PredictCollisionWithVessel(Vessel v, float maxTime, float interval, out Vector3 badDirection)
 		{
-			if(v == weaponManager.incomingMissileVessel
+			if(v == defenseControl.incomingMissileVessel
                 || v.rootPart.FindModuleImplementing<MissileBase>() != null) //evasive will handle avoiding missiles
 			{
 				badDirection = Vector3.zero;
@@ -922,10 +923,8 @@ namespace BDArmory.Control
 				if (weaponManager.TargetOverride)
 				{
 					extending = false;
-					weaponManager.ForceWideViewScan();
 				}
-				else
-					weaponManager.ForceWideViewScan();
+				weaponManager.DefenseControl.ForceWideViewScan();
 
 
 				float extendDistance = Mathf.Clamp(weaponManager.guardRange-1800, 2500, 4000);
@@ -1025,20 +1024,20 @@ namespace BDArmory.Control
 			currentStatus = "Evading";
             debugString.Append($"Evasive");
             debugString.Append(Environment.NewLine);
-            debugString.Append($"Threat Distance: {weaponManager.incomingMissileDistance}");
+            debugString.Append($"Threat Distance: {defenseControl.incomingMissileDistance}");
             debugString.Append(Environment.NewLine);
 
             collisionDetectionTicker += 2;
 
 
-			if(weaponManager)
+			if(defenseControl)
 			{
-				if(weaponManager.isFlaring)
+				if(defenseControl.isFlaring)
 				{
 					useAB = vessel.srfSpeed < minSpeed;
 					useBrakes = false;
 					float targetSpeed = minSpeed;
-					if(weaponManager.isChaffing)
+					if(defenseControl.isChaffing)
 					{
 						targetSpeed = maxSpeed;
 					}
@@ -1046,7 +1045,7 @@ namespace BDArmory.Control
 				}
 
 
-				if((weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance > 2000))
+				if((defenseControl.isChaffing || defenseControl.isFlaring) && (defenseControl.incomingMissileDistance > 2000))
 				{
                     debugString.Append($"Breaking from missile threat!");
                     debugString.Append(Environment.NewLine);
@@ -1057,7 +1056,7 @@ namespace BDArmory.Control
 					RegainEnergy(s, breakDirection);
 					return;
 				}
-				else if(weaponManager.underFire)
+				else if(defenseControl.underFire)
 				{
                     debugString.Append($"Dodging gunfire");
                     float threatDirectionFactor = Vector3.Dot(vesselTransform.up, threatRelativePosition.normalized);
@@ -1126,16 +1125,16 @@ namespace BDArmory.Control
 					return;
 
 				}
-				else if(weaponManager.incomingMissileVessel)
+				else if(defenseControl.incomingMissileVessel)
 				{
-					float mSqrDist = Vector3.SqrMagnitude(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
+					float mSqrDist = Vector3.SqrMagnitude(defenseControl.incomingMissileVessel.transform.position - vesselTransform.position);
 					if(mSqrDist < 810000) //900m
 					{
                         debugString.Append($"Missile about to impact! pull away!");
                         debugString.Append(Environment.NewLine);
 
                         AdjustThrottle(maxSpeed, false, false);
-						Vector3 cross = Vector3.Cross(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position, vessel.Velocity()).normalized;
+						Vector3 cross = Vector3.Cross(defenseControl.incomingMissileVessel.transform.position - vesselTransform.position, vessel.Velocity()).normalized;
 						if(Vector3.Dot(cross, -vesselTransform.forward) < 0)
 						{
 							cross = -cross;
@@ -1505,7 +1504,7 @@ namespace BDArmory.Control
 				vertFactor += Vector3.Dot(targetVessel.Velocity() / targetVessel.srfSpeed, (targetVessel.ReferenceTransform.position - vesselTransform.position).normalized) * 0.3f;   //the target moving away from us encourages upward motion, moving towards us encourages downward motion
 			else
 				vertFactor += 0.4f;
-			vertFactor -= weaponManager.underFire ? 0.5f : 0;   //being under fire encourages going downwards as well, to gain energy
+			vertFactor -= defenseControl.underFire ? 0.5f : 0;   //being under fire encourages going downwards as well, to gain energy
 
 			float alt = MissileGuidance.GetRadarAltitude(vessel);
 

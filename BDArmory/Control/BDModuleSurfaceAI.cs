@@ -455,16 +455,18 @@ namespace BDArmory.Control
 
 		void Tactical()
 		{
+            if (!weaponManager || !defenseControl) return;
+
 			// enable RCS if we're in combat
-			vessel.ActionGroups.SetGroup(KSPActionGroup.RCS, weaponManager && targetVessel && !BDArmorySettings.PEACE_MODE
+			vessel.ActionGroups.SetGroup(KSPActionGroup.RCS, targetVessel && !BDArmorySettings.PEACE_MODE
 				&& (weaponManager.selectedWeapon != null || (vessel.CoM - targetVessel.CoM).sqrMagnitude < MaxEngagementRange * MaxEngagementRange) 
-                || weaponManager.underFire || weaponManager.missileIsIncoming);
+                || defenseControl.underFire || defenseControl.missileIsIncoming);
 
 			// if weaponManager thinks we're under fire, do the evasive dance
-			if (weaponManager.underFire || weaponManager.missileIsIncoming)
+			if (defenseControl.underFire || defenseControl.missileIsIncoming)
 			{
 				targetVelocity = MaxSpeed;
-				if (weaponManager.underFire || weaponManager.incomingMissileDistance < 2500)
+				if (defenseControl.underFire || defenseControl.incomingMissileDistance < 2500)
 				{
 					if (Mathf.Abs(weaveAdjustment) + Time.deltaTime * weaveFactor > weaveLimit) weaveDirection *= -1;
 					weaveAdjustment += weaveFactor * weaveDirection * Time.deltaTime;
@@ -478,7 +480,7 @@ namespace BDArmory.Control
 			{
 				weaveAdjustment = 0;
 			}
-			DebugLine($"underFire {weaponManager.underFire}, weaveAdjustment {weaveAdjustment}");
+			DebugLine($"underFire {defenseControl.underFire}, weaveAdjustment {weaveAdjustment}");
 		}
 
 		bool PanicModes()
@@ -608,7 +610,7 @@ namespace BDArmory.Control
 		Vector3? PredictCollisionWithVessel(Vessel v, float maxTime, float interval)
 		{
 			//evasive will handle avoiding missiles
-			if (v == weaponManager.incomingMissileVessel 
+			if (v == defenseControl?.incomingMissileVessel 
                 || v.rootPart.FindModuleImplementing<Parts.MissileBase>() != null)
                 return null;
 
